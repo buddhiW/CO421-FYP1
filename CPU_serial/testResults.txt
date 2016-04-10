@@ -1,0 +1,52 @@
+************************************************************************
+one key guess
+************************************************************************
+**SAMPLEPOINTS: 100,000
+Started reading wave.txt file
+Reading time= 6142.429000
+Finished reading wave.txt file
+Started calculating MI
+Finished calculating MI
+MI= 0.367735 and keybyte= 0
+MI= 0.369550 and keybyte= 1
+MI= 0.384204 and keybyte= 2
+MI= 0.403775 and keybyte= 3
+MI= 0.427465 and keybyte= 4
+MI= 0.387985 and keybyte= 5
+MI= 0.371685 and keybyte= 6
+MI= 0.388895 and keybyte= 7
+MI= 0.372381 and keybyte= 8
+MI= 0.353569 and keybyte= 9
+MI= 0.419230 and keybyte= 10
+MI= 0.401190 and keybyte= 11
+MI= 0.358006 and keybyte= 12
+MI= 0.412310 and keybyte= 13
+MI= 0.404224 and keybyte= 14
+MI= 0.381570 and keybyte= 15
+Testing time= 63833.409000
+[Inferior 1 (process 18829) exited normally]
+
+**SAMPLEPOINTS: 1000,000
+Started reading wave.txt file
+Reading time= 57251.892000
+Finished reading wave.txt file
+Started calculating MI
+Finished calculating MI
+MI= 0.189444 and keybyte= 0
+MI= 0.233605 and keybyte= 1
+MI= 0.192280 and keybyte= 2
+MI= 0.192674 and keybyte= 3
+MI= 0.213686 and keybyte= 4
+MI= 0.170838 and keybyte= 5
+MI= 0.204608 and keybyte= 6
+MI= 0.179659 and keybyte= 7
+MI= 0.193525 and keybyte= 8
+MI= 0.203926 and keybyte= 9
+MI= 0.177990 and keybyte= 10
+MI= 0.220540 and keybyte= 11
+MI= 0.200727 and keybyte= 12
+MI= 0.238256 and keybyte= 13
+MI= 0.186146 and keybyte= 14
+MI= 0.198908 and keybyte= 15
+Testing time= 643391.507000
+[Inferior 1 (process 18870) exited normally]
