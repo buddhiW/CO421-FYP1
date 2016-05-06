@@ -1,0 +1,42 @@
+			
+				Test Results
+
+** Tesla Machine before upgrade
+
+Parallelising based on 16 key bytes. (16 threads were used)
+5831.00 s (1.6 hrs)
+
+=========================================================================
+** Tesla Machine after upgrade
+
+* Parallelising based on 16 key bytes. (16 threads were used)
+Results of three test runs:
+
+TestRun1	1427.00 s
+TestRun2	1429.00 s
+TestRun3	1524.00 s
+
+* Parallelising based on sample points.
+
+				16 threads		8 threads		4 threads
+	
+TestRun1		1513.00 s		1529.00 s		2654.00 s
+TestRun2		1500.00 s		1528.00 s		2240.00 s
+TestRun3		1501.00 s		1523.00 s
+
+=========================================================================
+** Aiken machine
+
+* Parallelising based on 16 key bytes
+
+TestRun1		938.00 s
+TestRun2
+
+* Parallelising based on sample points
+
+			32 threads		16 threads		8 threads
+
+TestRun1	754.00 s		1117.00 s		1750.00 s
+TestRun2	753.00 s		1055.00 s		1710.00 s
+TestRun3					977.00 s
+TestRun4					976.00 s
