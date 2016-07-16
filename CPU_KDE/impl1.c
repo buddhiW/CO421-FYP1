@@ -236,7 +236,7 @@ int main(){
 		//sourceMat[i]=malloc(sizeof(double) * SAMPLES);
 	
 	double * joint = malloc(sizeof(double) * SAMPLES * SAMPLES);
-	
+	double * marginalWave = malloc(sizeof(double) * SAMPLES);
 	//************ Temp test **************
 	/*FILE * test1 = fopen("set1.txt", "r");
 	FILE * test2 = fopen("set2.txt", "r");
@@ -250,7 +250,7 @@ int main(){
 	fclose(test1);
 	fclose(test2);*/
 	//*************************************
-
+	
 	for(m=0; m<1; m++){				
 		calHammingMat(m, hammingMat, plainText); //Calculate hamming weights for that key guess		
 		for (l=0;l<1;l++){
@@ -270,7 +270,7 @@ int main(){
 				
 				//printf("b1: %lf b2: %lf\n", bandwidth[0], bandwidth[1]);
 				gauss_kde_joint(sourceMat, waveData[k], bandwidth[0], 200, hammingMat[l], bandwidth[1], 200, joint);
-				
+				gauss_kde_marginal(sourceMat[0], bandwidth[0], 200, marginalWave);
 				
 				//double mi = MI(waveData[k], hammingMat[l], SAMPLES);
 				
@@ -311,14 +311,21 @@ int main(){
 		}
 		printf("\n");
 	}*/
-	FILE * f = freopen("test.txt", "w", stdout);
 	
+	FILE * f = freopen("test.txt", "w", stdout);
 	for(i=0; i<SAMPLES*SAMPLES; i++){
 		//for(j=0; j<SAMPLES; j++){
 			printf("%lf ", joint[i]);
 		//}
 		//printf("\n");
 	}
+	
+	printf("\n");
+	for(i=0; i<SAMPLES; i++){
+			printf("%lf ", marginalWave[i]);
+	}
+
+
 
 	//printf("Resulting MI:\n");
 	//printArrayDouble(miArr,KEYBYTES);

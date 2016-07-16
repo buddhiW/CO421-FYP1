@@ -74,6 +74,7 @@ double kde(double sourceArray[2][SAMPLES], double *target, int sourceLength, int
 			double temp=target[j]-sourceArray[j][i];
 			
 			double temp1 = gauss(target[j], sourceArray[j][i], bandWidth[j]);
+
 			mid = mid * temp1;	
 			
 		}
@@ -84,41 +85,45 @@ double kde(double sourceArray[2][SAMPLES], double *target, int sourceLength, int
 	
 	//printf("prob: %lf\n", prob);
 	
-	return (prob);//?????
+	return (prob/SAMPLES);//?????
 }
 
-/*double gauss_kde_marginal(double *sourceArray, double target, double bandWidth, int sourceLength){
+void gauss_kde_marginal(double *sourceArray, double bandWidth, int targetLength, double * probArray){
+	
+	double x_increment = 0.0;
+	
+	double x_max = find_max(sourceArray, SAMPLES) + (3*bandWidth); 
+	double x_min = find_min(sourceArray, SAMPLES) - (3*bandWidth); 
 
-	double h = bandWidth;
-	double two_h_square=2*h*h;
-	double pi=3.14159265358979;
-	//double q=(pow(-1,r))/(sqrt(2*pi)*N*(pow(h,(r+1))));
+	int points = 200;
+	
+	x_increment =  (x_max - x_min)/points;
+	
+	int i=0,j;
+	
+	double x = x_min;
 
-	int i,j;
-	double prob=0.0;
+	for(x = x_min; x<x_max; i++,x += x_increment){
 
-	for(i=0; i<sourceLength; i++)
-	{
-		double temp=target-sourceArray[i];
-		double norm=temp*temp; 
+		double prob=0.0;
+
+		printf("%d\n", i);
+		for(j=0; j<SAMPLES; j++){
+
+			double temp = gauss(x, sourceArray[j], bandWidth);	
+			prob = prob + temp;	
 			
-		prob = prob + (exp(-norm/two_h_square)/(sqrt(2*pi));			
-
+		}	
+	
+		probArray[i] = prob/SAMPLES;
 	}
 	
-	return (prob/h);
-}*/
+}
 
 
 
 void gauss_kde_joint(double sourceMatrix[2][SAMPLES], double *targetArray1, double bandWidth1, int targetLength1, 
 					double *targetArray2, double bandWidth2, int targetLength2, double *jointProbArray){
-						
-	double h1 = bandWidth1;		
-	double h2 = bandWidth2;
-	double two_h_square1=2*h1*h1;
-	double two_h_square2=2*h2*h2;
-	double pi=3.14159265358979;
 						
 	int i,j;
 	int jointTargetLength = targetLength1 * targetLength2;
@@ -141,38 +146,31 @@ void gauss_kde_joint(double sourceMatrix[2][SAMPLES], double *targetArray1, doub
 	y_increment =  (y_max - y_min)/points;
 	
 	double x = x_min;
+	double y = y_min; 
 		
 	printf("incx: %lf, incy: %lf\n", x_increment, y_increment);
 	printf("minX: %lf, minY: %lf\n", x_min, y_min);
-	//*********** ok**************
 	
+	//for(i = 0; i < 200; i++, x += x_increment){
+		//	printf("%lf ", x);			
+	//}
 	
 	for(j=0; j<targetLength1; j++, x += x_increment){
 		
 		double y = y_min; 
-		//jointProbArray[j]=0.0;
 
 		for(i=0; i<targetLength2; i++, y += y_increment){
 			
-			//target[0] = targetArray1[j];
-			//target[1] = targetArray2[i];
-			
 			target[0] = x;
 			target[1] = y;
-		
-			//double temp1=targetArray1[j]-sourceArray1[i];
-			//double norm1=temp1*temp1; 
-			//double temp2=targetArray2[j]-sourceArray2[i];
-			//double norm2=temp2*temp2;
-						
-			//jointProbArray[j] = jointProbArray[j]+(exp(-norm1/two_h_square1)/(sqrt(2*pi)))*(exp(-norm2/two_h_square2)/(sqrt(2*pi)));			
-			
+
 			double probVal = kde(sourceMatrix, target, 200, vars, bandWidth);
 			
+			//if(probVal >= 1)
+				//printf("damn! %d\n", j);
 			jointProbArray[j*SAMPLES+i] = probVal;
 			//printf("%lf ", jointProbArray[j]);	
-		}
-		//jointProbArray[j]=jointProbArray[j]/(h1*h2);
+		}	
 	}						
 }
 
