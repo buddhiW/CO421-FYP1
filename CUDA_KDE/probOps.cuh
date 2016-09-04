@@ -42,5 +42,6 @@ __global__ void KDE_findJointProbs2(double *dev_hammingData, double *dev_waveDat
 									unsigned int targetLengthH, double * bandwidthW, double * bandwidthH, 
 									double *dev_hammingTarget, double *dev_waveTarget, double *jointProbs,
 									int turn, int key, int keyByte);
-
+__global__ void KDE_MI(double *MIvals, double *waveProbs, double *hammingProbs, double *jointProbs, 
+								int targetLengthH, int targetLengthW, int key, int keyByte, int turn);
 #endif

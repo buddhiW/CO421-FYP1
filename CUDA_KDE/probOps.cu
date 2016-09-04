@@ -289,7 +289,7 @@ __global__ void KDE_findJointProbs2(double *dev_hammingData, double *dev_waveDat
 
 /* ***Different grid*** */
 __global__ void KDE_MI(double *MIvals, double *waveProbs, double *hammingProbs, double *jointProbs, 
-								int targetLengthH, int targetLengthW, int key, int keyByte, int startPosition, int turn){
+								int targetLengthH, int targetLengthW, int key, int keyByte, int turn){
 
 	int xx = blockIdx.x*blockDim.x + threadIdx.x; //Samplepoint value
 	
