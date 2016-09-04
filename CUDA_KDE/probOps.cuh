@@ -38,5 +38,9 @@ __global__ void KDE_findProbsWave(double *dev_waveData, double * dev_waveDataPro
 __global__ void KDE_findJointProbs(double *dev_hammingData, double *dev_waveData, unsigned int targetLengthW, 
 									unsigned int targetLengthH, double *jointProbs, double * bandwidthW, double * bandwidthH, 
 									double * maxMinH, double * maxMinW, int turn);
+__global__ void KDE_findJointProbs2(double *dev_hammingData, double *dev_waveData, unsigned int targetLengthW, 
+									unsigned int targetLengthH, double * bandwidthW, double * bandwidthH, 
+									double *dev_hammingTarget, double *dev_waveTarget, double *jointProbs,
+									int turn, int key, int keyByte);
 
 #endif

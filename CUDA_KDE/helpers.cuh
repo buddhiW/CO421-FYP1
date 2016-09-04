@@ -30,6 +30,10 @@
 //#define TEST 6250
 #define REPEAT 16
 #define WIDTH 20 //Range of one bin
+
+/** new **/
+#define DIVIDE 2
+
 //#define BINS 80
 #define checkCudaError() { gpuAssert(__FILE__, __LINE__); }
 

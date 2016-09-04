@@ -33,7 +33,15 @@ __device__ double gauss(double x, double data, double h){
 	double temp = x - data;
 	double norm = temp*temp; 
 	
-	return (exp(-norm/two_h_square)/(h*sqrt(2*pi)));
+	double temp1 = exp(-norm/two_h_square)/(h*sqrt(2*pi));
+	
+	
+	if(isnan(temp1)!=0){
+		__threadfence();
+		asm("trap;");
+	}
+				
+	return temp1;
 }
 
 
@@ -41,7 +49,7 @@ __global__ void KDE_findProbsWave(double *dev_waveData, double * dev_waveDataPro
 									double *bandWidthArray, int targetLength, double * maxMin){
 	
 	//int firstStateCounts[SAMPLES];
-	int i=0,j;
+	int i=0,j=0;
 	
 	//int samplePoint = (blockIdx.x*blockDim.x+blockDim.y) + threadIdx.x; //Directly gives sample point
 	int samplePoint = (gridDim.x*blockDim.x*blockIdx.y) + threadIdx.x + blockIdx.x*blockDim.x; //directly gives samplepoint
@@ -49,14 +57,14 @@ __global__ void KDE_findProbsWave(double *dev_waveData, double * dev_waveDataPro
 	//int startPositionProb = samplePoint*length;
 	//int startPositionNorm = samplePoint*SAMPLES; //(sizeof(dev_normaliseArray1) != dev_firstStateProbs)
 	
-	double bandWidth = bandWidthArray[samplePoint];
 	
-	double min = maxMin[samplePoint*2];
-	double max = maxMin[samplePoint*2+1];
 	double x_increment = 0.0;
 	
 	if (samplePoint < SAMPLEPOINTS){
 
+		double min = maxMin[samplePoint*2];
+		double max = maxMin[samplePoint*2+1];
+		double bandWidth = bandWidthArray[samplePoint];
 		double x_max = max + (3*bandWidth); 
 		double x_min = min - (3*bandWidth); 
 	
@@ -64,6 +72,13 @@ __global__ void KDE_findProbsWave(double *dev_waveData, double * dev_waveDataPro
 	
 		double x = x_min;
 		double prob = 0.0;
+		
+		//if(isnan(bandWidth)!=0){
+			//printf("errorNan %d %d\n",samplePoint, __LINE__);
+			//__threadfence();
+			//asm("trap;");
+		//}
+		
 		
 		for(x = x_min; x<x_max; i++,x += x_increment){
 
@@ -98,19 +113,19 @@ __global__ void KDE_findProbsHamming(double *dev_hammingData, double * dev_hammi
 	int key =  blockIdx.x; // There are 256 blocks 
 	int keyByte = threadIdx.x; 
 
-	int i=0,j;
+	int i=0,j=0;
 	
 	int startPositionData = key*SAMPLES*KEYBYTES + keyByte*SAMPLES;
 	int startPositionProb = key*targetLength*KEYBYTES + keyByte*targetLength;
-	//int length = SAMPLES;
-
-	double bandWidth = bandWidthArray[key*KEYBYTES + keyByte];
-
-	double min = maxMin[key*2*KEYBYTES+2*keyByte];
-	double max = maxMin[key*2*KEYBYTES+2*keyByte+1];
+	//int length = SAMPLES
 
 	if ((key < KEYS) && (keyByte < KEYBYTES)){
 	
+		double bandWidth = bandWidthArray[key*KEYBYTES + keyByte];
+
+		double min = maxMin[key*2*KEYBYTES+2*keyByte];
+		double max = maxMin[key*2*KEYBYTES+2*keyByte+1];
+		
 		double x_max = max + (3*bandWidth); 
 		double x_min = min - (3*bandWidth); 
 		
@@ -215,77 +230,102 @@ __global__ void KDE_findJointProbs(double *dev_hammingData, double *dev_waveData
 __global__ void KDE_findJointProbs2(double *dev_hammingData, double *dev_waveData, unsigned int targetLengthW, 
 									unsigned int targetLengthH, double * bandwidthW, double * bandwidthH, 
 									double *dev_hammingTarget, double *dev_waveTarget, double *jointProbs,
-									double * maxMinH, double * maxMinW, int turn, int key, int keyByte){
+									int turn, int key, int keyByte){
 	
 	int xx = blockIdx.x*blockDim.x + threadIdx.x;//Index of Hamming target array
 	int yy = blockIdx.y*blockDim.y + threadIdx.y;//Index of wave target array
 	int zz = blockIdx.z*blockDim.z + threadIdx.z;//10,000 SAMPLEPOINTS
 	
-	//int key = yy + turn;
-	//int keyByte = xx;
-	
-	int samplePoint = zz+turn; //turn goes from 0 to 90,000, in steps of 10,000
 	int jointIndex = xx + blockDim.x*gridDim.x * yy; // Index in the joint prob array for the given sample point
+	int i;
 	
-	//int startJoint = (xx+startPosition)*KEYBYTES*maxOfJoint + yy*maxOfJoint;
-	//int endPosition = startPosition + SAMPLEPOINTS/REPEAT;
-	
-	int i,j;
-	
-	//int jointTargetLength = targetLengthH * targetLengthW;
-	
-	double bandWidthW = bandwidthW[zz];
-	double bandWidthH = bandwidthH[key*KEYBYTES + keyByte];
-	
-	int vars = 2;
-	
-	double x_increment = 0.0;
-	double y_increment = 0.0;
-	
-	double x_min = maxMinW[samplePoint*2] - (3*bandWidthW);
-	double x_max = maxMinW[samplePoint*2+1] + (3*bandWidthW);
-	double y_min = maxMinH[key*2*KEYBYTES+2*keyByte] - (3*bandWidthH); 
-	double y_max = maxMinH[key*2*KEYBYTES+2*keyByte+1] + (3*bandWidthH);
-	
-	x_increment =  (x_max - x_min)/targetLengthW;
-	y_increment =  (y_max - y_min)/targetLengthH;
+	if (zz<SAMPLEPOINTS/DIVIDE && yy<targetLengthW && xx<targetLengthH){
 
-	if (zz<SAMPLEPOINTS/10 && yy<targetLengthW && xx<targetLengthH){
-
-		double x = x_min;
-
-		//for(j=0; j<targetLengthW; j++, x += x_increment){
+			int samplePoint = zz+turn; //turn goes from 0 to 90,000, in steps of 10,000
 		
-			double y = y_min; 
-			double prob;
-			//for(i=0; i<targetLengthH; i++, y += y_increment){
-				
+			double bandWidthW = bandwidthW[samplePoint];
+			double bandWidthH = bandwidthH[key*KEYBYTES + keyByte];
+		
+			double prob=0.0;	
+			unsigned int i1 = key*KEYBYTES*targetLengthH+keyByte*targetLengthH+xx;	
+			unsigned int i2 = samplePoint*targetLengthW+yy;
+			double targetHamming = dev_hammingTarget[i1]; 
+			double targetWave = dev_waveTarget[i2]; 
+			int startPositionHamming = key*SAMPLES*KEYBYTES + keyByte*SAMPLES;	
+		
+			//if(isnan(bandWidthW)!=0){
+					//printf("errorNan %d %d\n",samplePoint, __LINE__);
+				//	__threadfence();
+				//	asm("trap;");
+			//}
+		
 				for(i=0; i<SAMPLES; i++){
 		
 					double mid = 0.0;
 		
-					double tempW = gauss(x, dev_waveData[samplePoint+i], bandWidthW);
-					double tempH = gauss(y, dev_hammingData[key*KEYBYTES + keyByte], bandWidthH);
+					double tempW = gauss(targetWave, dev_waveData[samplePoint*SAMPLES+i], bandWidthW);
+					double tempH = gauss(targetHamming, dev_hammingData[startPositionHamming+i], bandWidthH);
 
 					mid = tempW * tempH;				
-											
+					
+									
 					prob = prob + mid;
 				}
 				
 				prob = (prob/SAMPLES);
-				
-				int indexGlobal = jointIndex + targetLengthW*targetLengthH*SAMPLEPOINTS/10;
-				
-				jointProbs[indexGlobal] = prob;
 
-			//}	
-		//}					
-		
+				int indexGlobal = jointIndex + targetLengthW*targetLengthH*zz;
+
+				jointProbs[indexGlobal] = prob;
+				
+				//if(samplePoint < 2000){
+					//if(isnan(jointProbs[indexGlobal])!=0){
+						//__threadfence();
+						//asm("trap;");
+					//}
+				//}
 	}	
+}
+
+/* ***Different grid*** */
+__global__ void KDE_MI(double *MIvals, double *waveProbs, double *hammingProbs, double *jointProbs, 
+								int targetLengthH, int targetLengthW, int key, int keyByte, int startPosition, int turn){
+
+	int xx = blockIdx.x*blockDim.x + threadIdx.x; //Samplepoint value
+	
+	int i;
+	int firstIndx, secondIndx;
+	double MI = 0.0;
+	
+	int samplePoint = xx+turn;
+	int targetLengthJoint = targetLengthW*targetLengthH;
+	
+	if(xx<SAMPLEPOINTS/DIVIDE){
+	
+		for (i=0; i<targetLengthJoint; i++){
+				firstIndx = i%targetLengthW;
+				secondIndx = i/targetLengthW;
+				
+				double c1 = waveProbs[samplePoint*targetLengthW + firstIndx];
+				double c2 = hammingProbs[key*KEYBYTES*targetLengthH + keyByte*targetLengthH + secondIndx];
+				double c3 = jointProbs[xx*targetLengthJoint + i];
+				
+				if ((c3 > 0.0) && (c1 > 0.0) && (c2 > 0.0)){
+						
+						double temp = c3 * log(c3 / (c1 * c2));
+						MI = MI + temp;
+				}			
+		}
+			
+			MI = MI/log(2.0);
+			
+			MIvals[key*KEYBYTES*SAMPLEPOINTS + keyByte*SAMPLEPOINTS + samplePoint] = MI;
+									
+	}
 }
 /**********************************************************************************************************************************/
 
-__global__ void findProbsWave(unsigned int *dev_normaliseArray1, double * dev_firstStateProbs, unsigned int *dev_firstNumState, int length){
+/*__global__ void findProbsWave(unsigned int *dev_normaliseArray1, double * dev_firstStateProbs, unsigned int *dev_firstNumState, int length){
 	
 	//int firstStateCounts[SAMPLES];
 	int i,j,postt;
@@ -357,7 +397,7 @@ __global__ void findProbsHamming(unsigned int *dev_normaliseArray2, double * dev
 		}
 	
 	}	
-}
+}*/
 
 __global__ void findJointProbs(double *MIvals, unsigned int *normaliseWave, unsigned int *normaliseHamming, unsigned int *firstNumStates, 
 								unsigned int *secondNumStates, double *waveProbs, double *hammingProbs, double *jointProbs, 

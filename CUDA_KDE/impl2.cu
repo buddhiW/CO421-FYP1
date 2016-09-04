@@ -94,7 +94,7 @@ int arrayMax(unsigned int * data, int length){
 //  Calculate maximum and minimum of each data set
 //-------------------------------------------------------------------------------------------------------
 __global__ void KDE_bandwidthHammingKernel(double * dataArray, double * bandwidthArray, double * maxMinArray,
-												int targetLengthH, double * targetArray){
+												int targetLengthH, double * targetArray){          
 	
 	/* Block size = KEYS/16, KEYS/16,1
 	 * Grid size = KEYBYTE, 1,1
@@ -107,8 +107,8 @@ __global__ void KDE_bandwidthHammingKernel(double * dataArray, double * bandwidt
 	int keyByte = threadIdx.y;
 	int key = blockIdx.x*blockDim.x + threadIdx.x;
 	int targetLength = targetLengthH;
-	double sum_array;
-	double sum_2_array;
+	double sum_array=0;
+	double sum_2_array=0;
 
 	
 	
@@ -144,13 +144,21 @@ __global__ void KDE_bandwidthHammingKernel(double * dataArray, double * bandwidt
 		double x_max = max + (3*b); 
 		double x_min = min - (3*b); 	
 		double x_increment =  (x_max - x_min)/targetLength;		
-		double x=x_min;
-		
-		for(j=0; j<targetLength; j++){
-			int index = key*KEYBYTES*targetLength +keyByte*targetLength+j;
-			targetArray[index] = x;
-			x += x_increment;
+		double xVal=x_min;
+		j=0;
+		for(xVal = x_min; xVal<x_max; j++,xVal += x_increment){
+			if(j<targetLength){
+				
+				int index = key*KEYBYTES*targetLength + keyByte*targetLength+j;
+				targetArray[index] = xVal;
+				if((keyByte == 10) && (key == 255))
+					printf("%d\n", j);
+					
+			}
+			
 		}
+		
+		
 	}
 }
 
@@ -170,15 +178,23 @@ __global__ void KDE_bandwidthWaveKernel(double * dataArray, double * bandwidthAr
 	int min = INT_MAX; 
 	int samplePoint = blockIdx.x*blockDim.x + threadIdx.x;
 	int targetLength = targetLengthW;
-	double sum_array;
-	double sum_2_array;
+	double sum_array=0;
+	double sum_2_array=0;
 
 	if (samplePoint < SAMPLEPOINTS){
-		//printf("*****");
+		
+	
+		
 		for(j=0; j<SAMPLES; j++){
 			int index = samplePoint*SAMPLES + j;
 			sum_array += dataArray[index];
 			sum_2_array += dataArray[index] * dataArray[index];
+			
+			//if(isnan(sum_2_array)!=0){ //x2 ERROR!!
+			//printf("error at: %d\n", samplePoint);
+				//__threadfence();
+				//asm("trap;");
+			//}
 			
 			if(dataArray[index] > max){
 				max = dataArray[index];
@@ -192,10 +208,18 @@ __global__ void KDE_bandwidthWaveKernel(double * dataArray, double * bandwidthAr
 		
 		double x  = sum_array/SAMPLES;
 		double x2 = sum_2_array/SAMPLES;
-		//printf("%lf %lf ", x, x2);
+		
 		double sigma = sqrt(x2 - (x*x));
+		
 		double b = sigma*(pow((3.0*SAMPLES/4.0),(-1.0/5.0)));
 		bandwidthArray[samplePoint] = b;
+		
+		//if(isnan(x2)!=0){ //x2 ERROR!!
+			//printf("error at: %d\n", samplePoint);
+			//__threadfence();
+			//asm("trap;");
+		//}
+		
 		maxMinArray[2*samplePoint] = min;
 		maxMinArray[2*samplePoint+1] = max;
 		
@@ -204,12 +228,15 @@ __global__ void KDE_bandwidthWaveKernel(double * dataArray, double * bandwidthAr
 		double x_max = max + (3*b); 
 		double x_min = min - (3*b); 	
 		double x_increment =  (x_max - x_min)/targetLength;		
-		double x=x_min;
-		
-		for(j=0; j<targetLength; j++){
-			targetArray[samplePoint*targetLength+j] = x;
-			x += x_increment;
+		double xVal=x_min;
+		j=0;
+		for(xVal = x_min; xVal<x_max; j++,xVal += x_increment){
+			if(j<targetLength){
+				int index = samplePoint*targetLength+j;
+				targetArray[index] = xVal;
+			}
 		}
+		
 		
 	}
 }
@@ -249,7 +276,17 @@ __global__ void simpleSort(double *origMat, int cols, double *maxOfEach, int key
 int main(){
 
 	//cudaSetDevice(1);
+	//int nDevices;
 	
+	//cudaGetDeviceCount(&nDevices);
+	//for (int i = 0; i < nDevices; i++) {
+    //cudaDeviceProp prop;
+    //cudaGetDeviceProperties(&prop, i);
+    //printf("Device Number: %d\n", i);
+    //printf("  Device name: %s\n", prop.name);
+    //printf("  Max Blocks: %d\n",
+    //       *prop.maxGridSize);
+  //}
 
 
 	//plainText at host
@@ -320,47 +357,84 @@ int main(){
 	
 
 	 /* **************************** KDE_bandwidthHammingKernel ***************************** */
+	int targetLengthH = 12; 
 	double *dev_banwWidthHamming;
-	cudaMalloc((void **)&dev_banwWidthHamming, KEYBYTES*KEYS*sizeof(double));
+	cudaMalloc((void **)&dev_banwWidthHamming, KEYBYTES*KEYS*sizeof(double)); checkCudaError();
+	
+	double *dev_targetHamming;
+	cudaMalloc((void **)&dev_targetHamming, KEYBYTES*KEYS*targetLengthH*sizeof(double)); checkCudaError();
+	
 	double *dev_maxMinHamming;
-	cudaMalloc((void **)&dev_maxMinHamming, KEYBYTES*KEYS*2*sizeof(double));
+	cudaMalloc((void **)&dev_maxMinHamming, KEYBYTES*KEYS*2*sizeof(double)); checkCudaError();
+	
+	
 	
 	double *banwWidthHamming = (double *)malloc(KEYS*KEYBYTES*sizeof(double));
+	double *targetHamming = (double *)malloc(KEYBYTES*KEYS*targetLengthH*sizeof(double));
 	
 	dim3 numBlocksBWH(16,1); //Blocks in the grid
 	dim3 numThreadsBWH(16,16); // Threads per block
 	
-	KDE_bandwidthHammingKernel<<<numBlocksBWH, numThreadsBWH>>>(dev_hammingMat, dev_banwWidthHamming, dev_maxMinHamming);
-	//cudaMemcpy(banwWidthHamming, dev_banwWidthHamming, KEYBYTES*KEYS*sizeof(double), cudaMemcpyDeviceToHost);
+	KDE_bandwidthHammingKernel<<<numBlocksBWH, numThreadsBWH>>>(dev_hammingMat, dev_banwWidthHamming, dev_maxMinHamming,
+																targetLengthH, dev_targetHamming); checkCudaError();
+	//SEEMS FINE!!															
+	cudaMemcpy(banwWidthHamming, dev_banwWidthHamming, KEYBYTES*KEYS*sizeof(double), cudaMemcpyDeviceToHost);checkCudaError();
 	
-	//printMatDouble(banwWidthHamming, KEYS, KEYBYTES);
+	/*FILE * fpP = freopen("results.txt", "w", stdout);
+	int ii, jj;
+	for(ii=0;ii<KEYS;ii++){
+		for(jj=0;jj<KEYBYTES;jj++){
+			int post = ii*KEYBYTES+jj;
+			printf("%lf  ",banwWidthHamming[post]);
+		}
+			printf("\n");
+	}
+	fclose(fpP);*/
+	
 	printf("bandwidth Hamming done\n");
 	free(banwWidthHamming);
+	free(targetHamming);
 	/* **************************** KDE_bandwidthWaveKernel ***************************** */
+	int targetLengthW = 256; 
 	double * dev_waveData;
-	cudaMalloc((void **)&dev_waveData, SAMPLEPOINTS * SAMPLES*sizeof(double));
-	cudaMemcpy(dev_waveData, waveData, SAMPLEPOINTS * SAMPLES*sizeof(double), cudaMemcpyHostToDevice);
+	cudaMalloc((void **)&dev_waveData, SAMPLEPOINTS * SAMPLES*sizeof(double)); checkCudaError();
+	cudaMemcpy(dev_waveData, waveData, SAMPLEPOINTS * SAMPLES*sizeof(double), cudaMemcpyHostToDevice);checkCudaError();
 	
 	double *dev_banwWidthWave;
-	cudaMalloc((void **)&dev_banwWidthWave, SAMPLEPOINTS*sizeof(double));
+	cudaMalloc((void **)&dev_banwWidthWave, SAMPLEPOINTS*sizeof(double)); checkCudaError();
+	
+	double *dev_targetWave;
+	cudaMalloc((void **)&dev_targetWave, SAMPLEPOINTS*targetLengthW*sizeof(double)); checkCudaError();
+	
 	double *dev_maxMinWave;
-	cudaMalloc((void **)&dev_maxMinWave, SAMPLEPOINTS*2*sizeof(double));
-	
+	cudaMalloc((void **)&dev_maxMinWave, SAMPLEPOINTS*2*sizeof(double)); checkCudaError();
+
 	double *banwWidthWave = (double *)malloc(SAMPLEPOINTS*sizeof(double));
+	double *targetWave = (double *)malloc(SAMPLEPOINTS*targetLengthW*sizeof(double));
 	
-	dim3 numBlocksBWW(1000, 1, 1);
-	dim3 numThreadsBWW(100, 1, 1);
+	dim3 numBlocksBWW(100, 1, 1);
+	dim3 numThreadsBWW(1000, 1, 1);
 	
-	KDE_bandwidthWaveKernel<<<numBlocksBWW, numThreadsBWW>>>(dev_waveData, dev_banwWidthWave, dev_maxMinWave);
-	//cudaMemcpy(banwWidthWave, dev_banwWidthWave, SAMPLEPOINTS*sizeof(double), cudaMemcpyDeviceToHost);
+	KDE_bandwidthWaveKernel<<<numBlocksBWW, numThreadsBWW>>>(dev_waveData, dev_banwWidthWave, dev_maxMinWave,
+																targetLengthW, dev_targetWave);checkCudaError();
+	cudaMemcpy(banwWidthWave, dev_banwWidthWave, SAMPLEPOINTS*sizeof(double), cudaMemcpyDeviceToHost);checkCudaError();
 	
-	//printArrayDouble(banwWidthWave, SAMPLEPOINTS);
+	/*FILE * fpP = freopen("results.txt", "w", stdout);
+	int ii, jj;
+	for(ii=0;ii<SAMPLEPOINTS;ii++){
+		//for(jj=0;jj<SAMPLES;jj++){
+			//int post = ii*SAMPLES+jj;
+			printf("%lf  ",banwWidthWave[ii]);
+		//}
+			printf("\n");
+	}
+	fclose(fpP);*/
 	printf("bandwidth Wave done\n");
 	free(banwWidthWave);
 	/* **************************** KDE_findProbsHamming ******************************** */
-	int targetLengthH = 10; 
+	
 	double *dev_hammingDataProbs;
-	cudaMalloc((void **)&dev_hammingDataProbs, KEYBYTES*KEYS*targetLengthH*sizeof(double));
+	cudaMalloc((void **)&dev_hammingDataProbs, KEYBYTES*KEYS*targetLengthH*sizeof(double)); checkCudaError();
 	
 	double *hammingDataProbs = (double *)malloc(KEYBYTES*KEYS*targetLengthH*sizeof(double));
 	
@@ -377,11 +451,11 @@ int main(){
 	printf("prob hamming done\n");
 	//fclose(fpP);
 	free(hammingDataProbs);
+	
 	/* **************************** KDE_findProbsWave ******************************** */
 	
-	int targetLengthW = 200; 
 	double *dev_waveDataProbs;
-	cudaMalloc((void **)&dev_waveDataProbs, SAMPLEPOINTS*targetLengthW*sizeof(double));
+	cudaMalloc((void **)&dev_waveDataProbs, SAMPLEPOINTS*targetLengthW*sizeof(double)); checkCudaError();
 	
 	double *waveDataProbs = (double *)malloc(SAMPLEPOINTS*targetLengthW*sizeof(double));
 	
@@ -390,7 +464,7 @@ int main(){
 	
 	KDE_findProbsWave<<<numBlocksProbsWKDE, threadsPerBlocksProbsWKDE>>>(dev_waveData, dev_waveDataProbs, 
 							dev_banwWidthWave, targetLengthW, dev_maxMinWave);
-							
+	checkCudaError();						
 	//cudaMemcpy(waveDataProbs, dev_waveDataProbs, SAMPLEPOINTS*targetLengthW*sizeof(double), cudaMemcpyDeviceToHost);
 	
 	//FILE * fpP = freopen("results.txt", "w", stdout);
@@ -399,26 +473,81 @@ int main(){
 	//fclose(fpP);
 	free(waveDataProbs);
 	
-	/* **************************** KDE_findProbsJoint ******************************** */
+	cudaFree(dev_maxMinWave);
+	cudaFree(dev_maxMinHamming);
+	
+	/* **************************** KDE_findProbsJoint2 ******************************** */
 	int targetLengthJoint = targetLengthW*targetLengthH;
 	double *dev_jointProbs;
-	cudaMalloc((void **)&dev_jointProbs, SAMPLEPOINTS*targetLengthJoint*sizeof(double)); //for eight keys
-
-	dim3 numBlocksProbsJointKDE(1,4,25000);
-	dim3 threadsPerBlocksProbsJointKDE(16,2,4);
-
+	cudaMalloc((void **)&dev_jointProbs, (SAMPLEPOINTS/DIVIDE)*targetLengthJoint*sizeof(double)); checkCudaError();
 	
-	//KDE_findJointProbs<<<numBlocksProbsJointKDE, threadsPerBlocksProbsJointKDE>>>(dev_hammingMat, dev_waveData, targetLengthW,
-		//			targetLengthH, dev_jointProbs, dev_banwWidthWave, dev_banwWidthHamming, dev_maxMinWave, dev_maxMinHamming, 0);
+	double *jointProbs = (double *)malloc((SAMPLEPOINTS/DIVIDE)*targetLengthJoint*sizeof(double));checkCudaError();
 	
+	int turn = 0;
+	int key = 0;
+	int keyByte = 0;
 	
+	dim3 blocksProbsJointKDE(ceil(targetLengthH/4.0),ceil(targetLengthW/16.0),SAMPLEPOINTS/(DIVIDE*4));
+	//dim3 blocksProbsJointKDE(3,16,12500);
+	dim3 threadsProbsJointKDE(4,16,4);
+	
+	/* KDE_MI kernel */
+	dim3 blocksMIJointKDE(200,0,0);
+	dim3 threadsProbsJointKDE(256,0,0);
+	
+	cudaEvent_t start,stop;
+	float elapsedtime;
+	cudaEventCreate(&start);
+	cudaEventRecord(start,0);
+	
+	for(key=0; key<1; key++){
+		for(i=0; i<1; i++){
+			
+			KDE_findJointProbs2<<<blocksProbsJointKDE, threadsProbsJointKDE>>>(dev_hammingMat, dev_waveData, targetLengthW, 
+									targetLengthH, dev_banwWidthWave, dev_banwWidthHamming, dev_targetHamming, dev_targetWave, 
+									dev_jointProbs,turn, key, keyByte);
+			cudaThreadSynchronize();						
+			checkCudaError();
+			
+			turn = turn + 50000;
+			//cudaMemset(dev_jointProbs, 0, (SAMPLEPOINTS/DIVIDE)*targetLengthJoint*sizeof(double)); checkCudaError();
+			
+			cudaMemcpy(jointProbs, dev_jointProbs, (SAMPLEPOINTS/DIVIDE)*targetLengthJoint*sizeof(double), cudaMemcpyDeviceToHost);
+			checkCudaError();
+			
+		}
+	}
+	cudaEventCreate(&stop);
+	cudaEventRecord(stop,0);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&elapsedtime,start,stop);
+	fprintf(stdout,"Time spent for operation : %.10f seconds\n",elapsedtime/(float)1000);
+	
+	FILE * fpP = freopen("results.txt", "w", stdout);
+	int ii, jj;
+	for(ii=0;ii<SAMPLEPOINTS/DIVIDE;ii++){
+		for(jj=0;jj<targetLengthJoint;jj++){
+			int post = ii*targetLengthJoint+jj;
+			printf("%lf  ",jointProbs[post]);
+		}
+			printf("\n");
+	}
+	fclose(fpP);
+	free(jointProbs);
 	printf("prob joint done\n");
+
 	cudaFree(dev_waveDataProbs);
 	cudaFree(dev_hammingDataProbs);
 	cudaFree(dev_banwWidthWave);
 	cudaFree(dev_banwWidthHamming);
 	cudaFree(dev_hammingMat);
 	cudaFree(dev_waveData);
+	cudaFree(dev_targetWave);
+	cudaFree(dev_targetHamming);
+	cudaFree(dev_jointProbs);
+	
+	/*** NO ERRORS!! ***/
+	
 	/*****************************************************************************************
 	 ******************************************************************************************/	
 	
@@ -482,117 +611,6 @@ int main(){
 	
 	cudaFree(dev_hamming);
 	printf("Hamming normalised, dev_hamming removed\n");*/
-	
-	/***************************************Calling findProbWave******************************************/
-	/*
-	int maxOfFirst = arrayMax(firstNumState, SAMPLEPOINTS);
-	
-	double *dev_firstStateProbs;
-	cudaMalloc((void **)&dev_firstStateProbs, SAMPLEPOINTS*maxOfFirst*sizeof(double));	checkCudaError();
-	
-	double *firstStateProbs = (double *)malloc(sizeof(double)*SAMPLEPOINTS*maxOfFirst);
-
-	dim3 numBlocksProbsWave(16, 16, 1);
-	dim3 threadsPerBlocksProbsWave(512, 1, 1);
-	
-	findProbsWave<<<numBlocksProbsWave, threadsPerBlocksProbsWave>>>(dev_waveDataNormalised, dev_firstStateProbs, dev_firstNumState, maxOfFirst);		checkCudaError(); 
-	cudaDeviceSynchronize();*/
-	/***************************************Calling findProbsHamming******************************************/
-	/*
-	int maxOfSecond = arrayMax(secondNumState, KEYS*KEYBYTES);
-	
-	double *dev_secondStateProbs;
-	
-	cudaMalloc((void **)&dev_secondStateProbs, KEYS*KEYBYTES*maxOfSecond*sizeof(double));	checkCudaError();
-	double *secondStateProbs = (double *)malloc(sizeof(double)*KEYS*KEYBYTES*maxOfSecond);
-	
-	//we need 16 parallel operations
-	dim3 numBlocksProbsHamming(256, 1, 1); 
-	dim3 threadsPerBlocksProbsHamming(16,1,1);
-	
-	findProbsHamming<<<numBlocksProbsHamming, threadsPerBlocksProbsHamming>>>(dev_hammingNormalised, dev_secondStateProbs, dev_secondNumState, maxOfSecond);	checkCudaError();
-	cudaDeviceSynchronize();
-	
-	printf("Hamming probabilities calculated\n");
-	cudaMemcpy(secondStateProbs, dev_secondStateProbs, KEYS*KEYBYTES*maxOfSecond*sizeof(double), cudaMemcpyDeviceToHost);
-	
-	//FILE * fpP = freopen("results_prob_hamming.txt", "w", stdout);
-	//printMatDouble(secondStateProbs,100,maxOfSecond*KEYBYTES);*/
-	//fclose(fpP);
-	/*************************************************************Calling joint Probs***************************************************/
-	/*
-	int maxOfJoint = maxOfFirst*maxOfSecond;
-	printf("Max of first: %d\n",maxOfFirst);
-	printf("Max of second: %d\n",maxOfSecond);
-	printf("Max of joint: %d\n",maxOfJoint);
-
-	double *dev_jointProbs;
-	
-	int threads = SAMPLEPOINTS/REPEAT;
-	
-	//cudaMalloc((void **)&dev_jointProbs, KEYBYTES*SAMPLEPOINTS*maxOfJoint*sizeof(double));
-	cudaMalloc((void **)&dev_jointProbs, KEYBYTES*threads*maxOfJoint*sizeof(double)); 
-	double *jointProbs = (double *)malloc(KEYBYTES*threads*maxOfJoint*sizeof(double));
-	
-	//double *dev_MIvals;
-	//cudaMalloc((void **)&dev_MIvals, KEYBYTES*SAMPLEPOINTS*sizeof(double)); 
-	//double *MIvals = (double *)malloc(KEYBYTES*SAMPLEPOINTS*sizeof(double));
-	
-	double *dev_MIvals;
-	cudaMalloc((void **)&dev_MIvals, KEYS*KEYBYTES*SAMPLEPOINTS*sizeof(double)); 
-	cudaMemset(dev_MIvals, 0, KEYS*KEYBYTES*SAMPLEPOINTS*sizeof(double));
-	double *MIvals = (double *)malloc(KEYS*KEYBYTES*SAMPLEPOINTS*sizeof(double));
-	
-	//dim3 numBlocksJointProb(128,16,1);
-	//dim3 threadsPerBlockJointProb(1024,1,1);
-	dim3 numBlocksJointProb(32,16,1);
-	dim3 threadsPerBlockJointProb(256,1,1); //OPTIMUM: 256 threads per block. Occupancy reduce for lesser value.*/
-	
-	/**findJointProbs occupancy is maximum**/
-	/*
-	cudaEvent_t start,stop;
-	float elapsedtime;
-	cudaEventCreate(&start);
-	cudaEventRecord(start,0);
-	
-	for(i=0; i<NUMOFKEYS; i++){
-		int startPosition = 0;
-		for(j=0; j<REPEAT; j++){
-			//printf("This is the Start position: %d\n",startPosition);
-			
-			cudaMemset(dev_jointProbs, 0, KEYBYTES*threads*maxOfJoint*sizeof(double));
-			
-			
-			findJointProbs<<<numBlocksJointProb, threadsPerBlockJointProb>>>(dev_MIvals, dev_waveDataNormalised, dev_hammingNormalised, dev_firstNumState, 
-						dev_secondNumState, dev_firstStateProbs, dev_secondStateProbs, dev_jointProbs, 
-						maxOfFirst, maxOfSecond, i, startPosition); 	
-			cudaDeviceSynchronize();
-			checkCudaError();
-			//if(i==REPEAT-1)	
-			//	cudaMemcpy(jointProbs, dev_jointProbs, (KEYBYTES*threads*maxOfJoint)*sizeof(double), cudaMemcpyDeviceToHost); checkCudaError();
-			
-			startPosition = startPosition + threads;
-			//index = index + (KEYBYTES*threads*maxOfJoint);
-			//printf("index: %ul\n", index);
-		}
-	}
-	
-	printf("MI cal done\n");
-	cudaMemcpy(MIvals, dev_MIvals, KEYBYTES*SAMPLEPOINTS*sizeof(double), cudaMemcpyDeviceToHost); checkCudaError();*/
-	
-	/*int oo,aa;
-	for(oo=0;oo<2;oo++){
-		for(aa=0;aa<20;aa++){
-			printf("MI[%d] = %lf\n",(oo*SAMPLEPOINTS + aa),MIvals[oo*SAMPLEPOINTS + aa]);
-		}
-		printf("==================================================\n");
-	}*/
-	/*
-	cudaEventCreate(&stop);
-	cudaEventRecord(stop,0);
-	cudaEventSynchronize(stop);
-	cudaEventElapsedTime(&elapsedtime,start,stop);
-	fprintf(stdout,"Time spent for operation : %.10f seconds\n",elapsedtime/(float)1000);*/
 	
 	/***********Sorting***************/
 	/*
