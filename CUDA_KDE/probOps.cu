@@ -1,7 +1,8 @@
 /*
- * Author: Malin Prematilake
- * Date: 23.03.2016 00:28:11
- * Version: 1.0
+ * Version info
+ * MP		Initial version 23.03.2016
+ * BW		Changed methods to do KDe based probability calculation 
+ *
  * Description: This code contains all the functions related with calculating probability
 */
 #include <stdio.h>
@@ -79,6 +80,8 @@ __global__ void KDE_findProbsWave(double *dev_waveData, double * dev_waveDataPro
 			//asm("trap;");
 		//}
 		
+		//if(samplePoint == 0)
+			//printf("%lf %lf %lf %lf\n", x_increment, bandWidth, x_max, x_min);
 		
 		for(x = x_min; x<x_max; i++,x += x_increment){
 
@@ -232,25 +235,25 @@ __global__ void KDE_findJointProbs2(double *dev_hammingData, double *dev_waveDat
 									double *dev_hammingTarget, double *dev_waveTarget, double *jointProbs,
 									int turn, int key, int keyByte){
 	
-	int xx = blockIdx.x*blockDim.x + threadIdx.x;//Index of Hamming target array
+	int xx = blockIdx.x*blockDim.x + threadIdx.x;//SAMPLEPOINTS
 	int yy = blockIdx.y*blockDim.y + threadIdx.y;//Index of wave target array
-	int zz = blockIdx.z*blockDim.z + threadIdx.z;//10,000 SAMPLEPOINTS
+	int zz = blockIdx.z*blockDim.z + threadIdx.z;//Index of Hamming target array
 	
-	int jointIndex = xx + blockDim.x*gridDim.x * yy; // Index in the joint prob array for the given sample point
+	int jointIndex = zz + blockDim.z*gridDim.z * yy; // Index in the joint prob array for the given sample point
 	int i;
 	
-	if (zz<SAMPLEPOINTS/DIVIDE && yy<targetLengthW && xx<targetLengthH){
+	if (xx<SAMPLEPOINTS/DIVIDE && yy<targetLengthW && zz<targetLengthH){
 
-			int samplePoint = zz+turn; //turn goes from 0 to 90,000, in steps of 10,000
+			int samplePoint = xx+turn; //turn goes from 0 to 90,000, in steps of 10,000
 		
 			double bandWidthW = bandwidthW[samplePoint];
 			double bandWidthH = bandwidthH[key*KEYBYTES + keyByte];
 		
 			double prob=0.0;	
-			unsigned int i1 = key*KEYBYTES*targetLengthH+keyByte*targetLengthH+xx;	
+			unsigned int i1 = key*KEYBYTES*targetLengthH+keyByte*targetLengthH+zz;	
 			unsigned int i2 = samplePoint*targetLengthW+yy;
 			double targetHamming = dev_hammingTarget[i1]; 
-			double targetWave = dev_waveTarget[i2]; 
+			double targetWave = dev_waveTarget[i2];  	
 			int startPositionHamming = key*SAMPLES*KEYBYTES + keyByte*SAMPLES;	
 		
 			//if(isnan(bandWidthW)!=0){
@@ -274,9 +277,11 @@ __global__ void KDE_findJointProbs2(double *dev_hammingData, double *dev_waveDat
 				
 				prob = (prob/SAMPLES);
 
-				int indexGlobal = jointIndex + targetLengthW*targetLengthH*zz;
-
+				int indexGlobal = jointIndex + targetLengthW*targetLengthH*xx;
+				
+				//prob = prob * 1000000;
 				jointProbs[indexGlobal] = prob;
+				//jointProbs[indexGlobal] = xx;
 				
 				//if(samplePoint < 2000){
 					//if(isnan(jointProbs[indexGlobal])!=0){
@@ -303,18 +308,31 @@ __global__ void KDE_MI(double *MIvals, double *waveProbs, double *hammingProbs, 
 	if(xx<SAMPLEPOINTS/DIVIDE){
 	
 		for (i=0; i<targetLengthJoint; i++){
-				firstIndx = i%targetLengthW;
-				secondIndx = i/targetLengthW;
+				//firstIndx = i%targetLengthW;
+				//secondIndx = i/targetLengthW;
+				firstIndx = i/targetLengthH;
+				secondIndx = i%targetLengthH;
+				
 				
 				double c1 = waveProbs[samplePoint*targetLengthW + firstIndx];
 				double c2 = hammingProbs[key*KEYBYTES*targetLengthH + keyByte*targetLengthH + secondIndx];
 				double c3 = jointProbs[xx*targetLengthJoint + i];
 				
-				if ((c3 > 0.0) && (c1 > 0.0) && (c2 > 0.0)){
+				//if(samplePoint==0)
+					//printf("%lf %lf %lf\n", c1, c2, c3);
+					
+				if ((c3 > 0.0000001) && (c1 > 0.0000001) && (c2 > 0.0000001)){
 						
 						double temp = c3 * log(c3 / (c1 * c2));
+						//if(samplePoint==0)
+							//printf("%lf\n",(c3 / (c1 * c2)));
 						MI = MI + temp;
-				}			
+						
+						//if(samplePoint == 0)
+							//printf("%lf\n",MI);
+				}
+				
+				
 		}
 			
 			MI = MI/log(2.0);
